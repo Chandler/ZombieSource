@@ -9,7 +9,8 @@ class Player_model extends CI_Model{
     // );
     private $table_editable_fields = array(
         'original_zombie' => 'int',
-        'dateremoved' => 'datetime'
+        'dateremoved' => 'datetime',
+        'player_stateid' => 'int'
     );
 
     function __construct(){
@@ -42,6 +43,25 @@ class Player_model extends CI_Model{
         }
 
         return $query->row()->id;
+    }
+
+    public function getPlayerIDByHumanCode($humancode){
+        if($humancode != NULL){
+            $this->db->select('playerid');
+            $this->db->from('player_data');
+            $this->db->where('name', 'human_code');
+            $this->db->where('value', strtoupper($humancode));
+            $this->db->order_by('timestamp', 'desc');
+            $this->db->limit(1);
+            $query = $this->db->get();
+            if($query->num_rows() > 0){
+                return $query->row()->playerid;
+            } else {
+                throw new PlayerDoesNotExistException('Player not found');
+            }
+        } else {
+            throw new UnexpectedValueException('human code cannot be null');
+        }
     }
 
     public function getPlayerIDsByUserID($userid){
@@ -88,6 +108,30 @@ class Player_model extends CI_Model{
 
         return $query->row()->gameid;
     }
+
+    public function getUserIDbyPlayerID($playerid){
+        $this->db->select('userid');
+        $this->db->from($this->table_name);
+        $this->db->where('id',$playerid);
+        $query = $this->db->get();
+        if($query->num_rows() != 1){
+            throw new PlayerDoesNotExistException('Did not find a playerid for userid '.$userid);
+        }
+
+        return $query->row()->userid;
+    }
+
+
+    // @TODO: restrict active to not banned... probably need a column in the db for that
+    public function getActivePlayerUserIDsByGameID($gameid){
+        $playerids = $this->getActivePlayerIDsByGameID($gameid);
+        $userids  = array();
+        foreach($playerids as $playerid){
+            $userids[] = $this->getUserIDbyPlayerID($playerid);
+        }
+        return $userids;
+    }
+
 
     // @TODO: restrict active to not banned... probably need a column in the db for that
     public function getActivePlayerIDsByGameID($gameid){
