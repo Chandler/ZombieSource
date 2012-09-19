@@ -14,6 +14,7 @@ class admin_controller extends CI_Controller {
         $this->load->model('Player_model','',TRUE);
         $this->load->model('Team_model','',TRUE);
         $this->load->model('Game_model', '', TRUE);
+        $this->load->model('User_model', '', TRUE);
         $this->load->library('PlayerCreator', null);
         $this->load->library('UserCreator', null);
         $this->load->library('GameCreator', null);
@@ -23,7 +24,7 @@ class admin_controller extends CI_Controller {
 
         $this->current_gameid = $this->Game_model->getCurrentGame();
         $userid = $this->tank_auth->get_user_id();
-        $this->user = $this->usercreator->getUserByUserID($userid);
+        $this->user = $this->logged_in_user = $this->usercreator->getUserByUserID($userid);
         $this->players = $this->user->getModeratorPlayers();
          if(!$this->players){
              redirect('/home');
@@ -52,16 +53,38 @@ class admin_controller extends CI_Controller {
 
     public function player_controls(){
         $username = $this->input->post('player');
+        $human_code = $this->input->post('human_code');
         $gameid = $this->input->post('gameid');
         try{
-            $userid = getUserIDByUsername($username);
-            $player = $this->playercreator->getPlayerByUserIDGameID($userid, $gameid);
+            try{
+                $userid = getUserIDByUsername($username);
+            } catch(UnexpectedValueException $e){
+                try{
+                    $playerid = getPlayerIDByHumanCodeGameID($human_code, $gameid);
+                } catch(UnexpectedValueException $e){
+                    throw new PlayerDoesNotExistException('Username and human code were empty');
+                } catch(InvalidHumanCodeException $e ){
+                    throw new PlayerDoesNotExistException('Username and human code were empty');
+                };
+            }
+            try{
+                if(isset($userid)){
+                    $player = $this->playercreator->getPlayerByUserIDGameID($userid, $gameid);
+                } else if(isset($playerid)){
+                    $player = $this->playercreator->getPlayerByPlayerID($playerid);
+                }
+            } catch(InvalidParametersException $e){
+                throw new PlayerDoesNotExistException('Player does not exist');
+            }
             $data = getPrivatePlayerProfileDataArray($player);
 
             $is_mod = ($player->getData('moderator') == "1");
             $data['toggle_mod_to'] = $is_mod ? "0" : "1";
             $data['moderator_button_text'] = $is_mod ? "Remove Moderator" : "Make Moderator";
-            if(is_a($player, 'zombie')){
+            $data['status'] = $player->getStatus();
+            $is_active = $player->isActiveState();
+            $data['active_button_text'] = $is_active ? "Deactivate Player" : "Activate Player";
+            if($player->isActive() && $player->getStatus() == 'zombie'){
                 $data['feed_disabled'] = "";
                 $data['feed_message'] = "";
 
@@ -72,9 +95,8 @@ class admin_controller extends CI_Controller {
                     $tagger_name = $tag->getTagger()->getUser()->getUsername();
                     $taggee_name = $player->getUser()->getUsername();
 
-                    //spent 30 min trying to convert utc datetime to current 12 hour PST time to show the tag time and gave up due to time constraints.
                     //probably need a time helper.
-                    $message = "TAG: <h3> $tagger_name </h3> tagged <h3> $taggee_name </h3>";
+                    $message = "<b> $tagger_name </b> tagged <b> $taggee_name </b>";
 
                     $data['undo_tag_disabled'] = "";
                     $data['undo_tag_message'] = $message;
@@ -83,10 +105,13 @@ class admin_controller extends CI_Controller {
                     $data['undo_tag_message'] = "Zombie not elligble to be untagged";
                 }
             }else{ //is not a zombie, can't be feed or untagged
+                if($player->isActive() && $player->getPublicStatus() == 'human'){
+                    $data['human_code'] = $player->getHumanCode();
+                }
                 $data['feed_disabled'] = "disabled";
-                $data['feed_message'] = "Not a zombie";
+                $data['feed_message'] = "Not an active zombie";
                 $data['undo_tag_disabled'] = "disabled";
-                $data['undo_tag_message'] = "Not a zombie";
+                $data['undo_tag_message'] = "Not an active zombie";
             }
 
             $this->load->view('admin/player_controls.php', $data);
@@ -108,17 +133,37 @@ class admin_controller extends CI_Controller {
             //the important part of this method.
             $tag->invalidate();
             if($tag->isInvalid()){
+
+                $taggee = $tag->getTaggee();
+                $old_team_id = $taggee->getFormerTeam();
+                if($old_team_id && !$taggee->isMemberOfATeam()){
+                    $old_team = $this->teamcreator->getTeamByTeamID($old_team_id);
+                    $old_team->unRemovePlayer($taggee);
+
+                    $diff = strtotime($tag->getTagDateTime()) - strtotime($old_team->leaveTime());
+                    if($diff<=60 ){
+                        $old_team->unRemovePlayer($taggee);
+                    }
+                }
+
+                // regenerate zombie tree
+
+
+                $this->load->helper('tree_helper');
+                writeZombieTreeJSONByGameID($player->getGameID());
                 $this->loadGenericMessageWithoutLayout("Success! Tag invalidated");
                 // event logging
                 $analyticslogger = AnalyticsLogger::getNewAnalyticsLogger('admin_unto_tag','succeeded');
-                $analyticslogger->addToPayload('admin_playerid',$this->logged_in_user->getPlayerID());
+                $adminplayer = $this->playercreator->getPlayerByUserIDGameID($this->logged_in_user->getUserID(), $player->getGameID());
+                $analyticslogger->addToPayload('admin_playerid',$adminplayer->getPlayerID());
                 $analyticslogger->addToPayload('tagged_playerid', $player->getPlayerID());
                 LogManager::storeLog($analyticslogger);
             }else{
                 $this->loadGenericMessageWithoutLayout("$username is a Zombie still, something went wrong : /");
                 // event logging
                 $analyticslogger = AnalyticsLogger::getNewAnalyticsLogger('admin_unto_tag','failed');
-                $analyticslogger->addToPayload('admin_playerid',$this->logged_in_user->getPlayerID());
+                $adminplayer = $this->playercreator->getPlayerByUserIDGameID($this->logged_in_user->getUserID(), $player->getGameID());
+                $analyticslogger->addToPayload('admin_playerid',$adminplayer->getPlayerID());
                 $analyticslogger->addToPayload('tagged_playerid', $player->getPlayerID());
                 LogManager::storeLog($analyticslogger);
             }
@@ -163,7 +208,6 @@ class admin_controller extends CI_Controller {
     public function make_mod(){
         //mod
         $player = $this->playercreator->getPlayerByPlayerID($this->input->post('player'));
-        $username = $player->getUser()->getUsername();
         $was_moderator = $player->isModerator();
 
         $player->toggleModerator();
@@ -179,33 +223,51 @@ class admin_controller extends CI_Controller {
         }
     }
 
+    public function change_active(){
+        //mod
+        $player = $this->playercreator->getPlayerByPlayerID($this->input->post('player'));
+        $was_active = $player->isActive();
+
+        $player->toggleActive();
+        if($was_active !== $player->isActiveState()){
+            // echo the button text to be applied via AJAX
+            if($was_active){
+                echo 'Activate Player';
+            } else {
+                echo 'Deactivate Player';
+            }
+        } else {
+            echo 'Error';
+        }
+    }
+
     public function email_list(){
         $get = $this->uri->uri_to_assoc(2);
         // @TODO: THIS IS PROBABLY A TERRIBLE IDEA
         $type = $get['email_list'];
         $type = $this->security->xss_clean($type);
+        $game = $this->gamecreator->getGameByGameID('0b84d632-da0e-11e1-a3a8-5d69f9a5509e');
 
         if ($type == 'all') {
-            $players = getViewablePlayers($current_gameid);
-        } else if ($type == 'human') {
-            $players = getCanParticipateHumans($current_gameid);
-        } else if ($type == 'zombie') {
-            $players = getCanParticipateZombies($current_gameid);
+            $list = $this->Game_model->emailListFall2012();
+        } else if ($type == 'humans') {
+            $list = $game->getHumanEmails();
+        } else if ($type == 'zombies') {
+            $list = $game->getZombieEmails();
         } else {
             // @TODO: Should be an error
             return null;
         }
 
         $output = '';
-        foreach($players as $player){
-            $output .= $player->getUser()->getEmail() . ", ";
+        foreach($list as $email){
+            $output .= $email . ", ";
         }
-        $this->output->set_content_type('application/json')->set_output($output);
-
-        // event logging
         $analyticslogger = AnalyticsLogger::getNewAnalyticsLogger('admin_email_list','displayed');
-        $analyticslogger->addToPayload('playerid',$this->logged_in_user->getPlayerID());
+        $analyticslogger->addToPayload('userid',$this->logged_in_user->getUserID());
         LogManager::storeLog($analyticslogger);
+
+        $this->output->set_content_type('application/json')->set_output($output);
     }
 
     public function human_list(){
@@ -222,6 +284,22 @@ class admin_controller extends CI_Controller {
     private function loadGenericMessageWithoutLayout($message){
         $data = array("message" => $message);
         $this->load->view('helpers/display_generic_message',$data);
+    }
+
+    public function regenerate_zombie_tree(){
+        $gameid = $this->input->post('gameid');
+        $this->load->helper('tree_helper');
+        $bytes = writeZombieTreeJSONByGameID($gameid);
+        $message = $bytes ? "Success" : "An error occurred";
+        $this->loadGenericMessageWithoutLayout($message);
+    }
+
+    public function check_missed_achievements(){
+        $gameid = $this->input->post('gameid');
+        $this->load->library('AchievementCreator');
+        $ach = $this->achievementcreator->getAchievement();
+        $num_new = $ach->backgenerate();
+        $this->loadGenericMessageWithoutLayout("Added $num_new achievements");
     }
 }
 

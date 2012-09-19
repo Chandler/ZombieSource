@@ -9,6 +9,7 @@ class Player{
     public function __construct($playerid){
         $this->ci =& get_instance();
         $this->ci->load->model('Player_model','',TRUE);
+        $this->ci->load->model('Player_team_model','',TRUE);
         $this->ci->load->library('TeamCreator');
         $this->ci->load->library('GameCreator');
 
@@ -19,18 +20,31 @@ class Player{
         }
     }
 
+    public function isActiveState(){
+        $stateid = $this->ci->Player_model->getPlayerStateID($this->playerid);
+        return $stateid == 1;
+    }
+
     public function isActive(){
         //TODO this is no longer accurate
         //also should check if isInGame(GAME_KEY)
         // dateremoved in the database
 
-        $stateid = $this->ci->Player_model->getPlayerStateID($this->playerid);
-        return $stateid == 1 ? true : false;
+        return $this->isActiveState();
 
         // if(!$this->isBanned() && !$this->hasLeftGame()){
         //     return true;
         // }
         // return false;
+    }
+
+    public function setActive($value){
+        $this->ci->Player_model->setPlayerData($this->playerid, 'player_stateid', $value);
+    }
+
+    public function toggleActive(){
+        $active = $this->isActiveState();
+        $this->setActive($active ? 2 : 1);
     }
 
     public function hasLeftGame(){
@@ -67,7 +81,7 @@ class Player{
         }
     }
 
-    public function canParticipate(){
+  public function canParticipate(){
         if($this->isActive()){
             return true;
         } else {
@@ -75,13 +89,17 @@ class Player{
         }
     }
 
-    public function isActiveHuman(){
-        return $this->canParticipate() && is_a($this, 'Human');
-    }
+    // public function isActiveHuman(){
+    //     return $this->canParticipate() && is_a($this, 'Human');
+    // }
+    
+    // public function isActiveZombie(){
+    //     return $this->canParticipate() && (is_a($this, 'Zombie') || is_a($this, 'OriginalZombie'));
+    // }
 
-    public function isActiveZombie(){
-        return $this->canParticipate() && is_a($this, 'Zombie');
-    }
+    // public function isHiddenOriginalZombie(){
+    //     return ($this->isActiveZombie() && is_a($this, 'OriginalZombie') && !$this->isExposed());
+    // }
 
     public function isGameClosed(){
         $gameid = $this->getCurrentGameId();
@@ -155,6 +173,11 @@ class Player{
         return $this->ci->Player_team_model->getTeamIDByPlayerID($this->playerid);
     }
 
+    public function getFormerTeam(){
+        return $this->ci->Player_team_model->getFormerTeamIDByPlayerID($this->playerid);
+    }
+
+
     public function leaveCurrentTeam(){
         $this->ci->load->model('Player_team_model');
         $this->ci->Player_team_model->removePlayerFromTeam($this->getTeamID(), $this->playerid);
@@ -163,7 +186,6 @@ class Player{
     public function leaveGame(){
         $this->ci->Player_model->makePlayerInactive($this->playerid);
     }
-
 
     public function isElligibleForTagUndo(){
         return false;

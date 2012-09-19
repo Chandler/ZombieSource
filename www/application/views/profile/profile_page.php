@@ -1,6 +1,6 @@
 <div class="row-fluid">
   <div class="span8">
-    <div class="well">
+    <div class="well-profile">
       <div class = "line">
         <span class = "profile_data_item"> <h3><?php echo $username; ?></h3></span>
       </div>
@@ -13,12 +13,29 @@
           <br>
           <div class="row-fluid">
               <a href=" <?php echo site_url("profile/edit_profile"); ?> " id = "edit_profile">
-            <div class="btn btn-info">
-                Edit Profile
-            </div>
-            </a>
+                <div class="btn btn-info btn-mid">
+                    Edit Profile
+                </div>
+              </a>
 
           </div>
+
+              <?php
+                if($phone){
+                  echo'
+                    <a href="';
+                    echo site_url("profile/sms_settings");
+                    echo '" id = "sms_settings">
+                <div class="btn btn-light-blue btn-margin btn-mid">
+                   Edit SMS Settings
+                </div>
+              </a>'
+                  ;
+                }
+                ?>
+
+
+
         </div>
         <div class="span9">
           <div class="font-profile">
@@ -54,7 +71,9 @@
               <dt>Age </dt> <span class = "profile_data_item"> <dd><?php echo $age ? $age : "not given"; ?></dd></span>
               <dt>Gender </dt> <span class = "profile_data_item"> <dd><?php echo $gender ? $gender : "not given"; ?></dd> </span>
               <dt>Major </dt><span class = "profile_data_item"> <dd><?php echo $major ? $major : "not given"; ?></dd> </span>
-              <dt>Team </dt> <dd><?php echo $link_to_team; ?><dd>
+              <dt>Team </dt> <dd><?php echo $link_to_team ? $link_to_team : "No Team"; ?><dd>
+              <dt>SMS </dt><span class = "profile_data_item"> <dd><?php echo $phone ? $phone : "not given"; ?> <gray-font>(not public)</gray-font></dd></span>
+
             </dl>
           </div>
         <?php if($human_code){ ?>
@@ -71,6 +90,23 @@
         </div>
       </div>
     </div>
+        <?php
+                if(count($achievements) > 0){
+                    echo "<div class=\"well\">";
+                    echo '<h3>Achievements</h3>';
+                    foreach($achievements as $ach){
+                        $img = $ach['image_url'];
+                        $desc = $ach['description'];
+                        $name = $ach['name'];
+                        echo "<div class=\"achievement team_member\" rel=\"tooltip\" title=\"$desc\">";
+                        echo "<img src=\"$img\" class=\"twtr-pic\">";
+                        echo "<p>$name</p>";
+                        echo "</div>";
+                    }
+                    echo "</div>";
+                }
+        ?>
+
   </div>
 
     <div class="span4">
@@ -82,3 +118,27 @@
 
 </div>
 
+              <?php
+                if(!$phone){
+                  echo'
+                    <div class="row-fluid sms_settings_box well">
+                    <h3>Do you have Texting?</h3>
+                    <dd> Setup an <strong>SMS Number</strong> to: </dd>
+                    <li> Tag via text </li>
+                    <li> Recieve optional game updates </li>
+                    <li> More! </li>';
+                    echo '<a href="';
+                    echo site_url("profile/sms_settings");
+                    echo' " id = "sms_settings">
+                <div class="btn btn-light-blue btn-margin">
+                    SMS Setup/FAQ
+                </div>
+              </a>';
+                }
+                ?>
+                </div>
+          </div>
+
+<script>
+    $('.achievement').tooltip();
+</script>

@@ -1,5 +1,24 @@
 <?php
 
+function gmt_to_timezone($offset, $date){
+    $offset_seconds = $offset * 3600;
+    $datetime_seconds = strtotime($date);
+    $new_date = date("Y-m-d H:i:s", $datetime_seconds + $offset_seconds);
+    return $new_date;
+}
+
+function validate_phone($phone){
+    $valid_phone = null;    
+    $stripped = preg_replace("/[^0-9]/", "", $phone);
+    $length = strlen($stripped);
+    if(($length == 10) && ($stripped[0] != "1")){
+      $valid_phone = "1" . $stripped;
+    }else if(($length == 11) && ($stripped[0] == "1")){
+      $valid_phone = $stripped;
+    }
+    return $valid_phone;
+}
+
 
 function validGameSlug($game_slug){
     $CI =& get_instance();
