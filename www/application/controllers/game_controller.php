@@ -297,7 +297,7 @@ class game_controller extends CI_Controller {
         } else {
             $zombie = $player;
 
-            $max_feeds = 3; // @TODO: hard coded for now
+            $max_feeds = 2; // @TODO: hard coded for now
             for($i = 1; $i <= $max_feeds; $i++){
                 $this->form_validation->set_rules('zombie_friend_'.$i, 'Zombie Friend '.$i, 'trim|xss_clean|min_length[4]|callback_validate_username');
             }
@@ -376,14 +376,16 @@ class game_controller extends CI_Controller {
             return true;
         }
         $this->load->helper('user_helper');
-        $userid = getUserIDByUsername($string);
-        if($userid){
+        try{
+            $userid = getUserIDByUsername($string);
             $player = $this->playercreator->getPlayerByUserIDGameID($userid, $this->game->getGameID());
             if(is_a($player, 'Zombie') && $player->canParticipate()){
                 return true;
             }
+        }catch(PlayerDoesNotExistException $e){
+            error("caught-exception PlayerDoesNotExistException");
+            return false;
         }
-        return false;
     }
 
     public function register_new_team(){
