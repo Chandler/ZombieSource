@@ -21,10 +21,11 @@ class sms_controller extends CI_Controller {
     public function receive_message(){
         $value = $this->input->post('Body');
         $number = trim($this->input->post('From'), ' +');
-        $user= $this->usercreator->getUserByPhone($number);
-        $response = $this->generate_response($user, $value, $number);
+        $user = $this->usercreator->getUserByPhone($number);
 
-        debug('sms_response: value: ' . $value . ' userid: ' . $user->getUserID() . ' recipient_number: ' . $number . " message: " . $response);
+        $response = $this->generate_response($user, $value, $number);
+        $userid = $user == NULL ? "N/A" : $user->getUserID();
+        debug('sms_response: value: ' . $value . ' userid: ' . $userid . ' recipient_number: ' . $number . " message: " . $response);
         
         header("Content-type: text/xml");
         echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
@@ -39,7 +40,7 @@ class sms_controller extends CI_Controller {
         $command = $split_value[0];
 
         if($user==null || $user->currentGameID() == null){
-            $game = $this->gamecreator->getGameByGameID("0b84d632-da0e-11e1-a3a8-5d69f9a5509e");
+            $game = $this->gamecreator->getGameByGameID("74c709c2-8dc5-40ee-acc9-5dc34968c693");
         }else{
             $game = $this->gamecreator->getGameByGameID($user->currentGameID());
         }
@@ -69,7 +70,7 @@ class sms_controller extends CI_Controller {
         }
         else if($command == "stats"){
             list($human_count, $zombie_count, $starved_zombies) = $game->playerStatusCounts();
-            $response = "humans: $human_count active_zombies: $zombie_count starved_zombies: $starved_zombies"; 
+            $response = "humans: $human_count total_zombies: $zombie_count starved_zombies: $starved_zombies"; 
         }else if($user){ //All commands except stats/all/humans/zombies required a registered user.
             if($command == "start"){
                 $user->updateSubscription("pause_updates", false);
